@@ -1,5 +1,9 @@
 /* Base styles for QuickInterview AI */
 
+body {
+  overflow-x: hidden;
+}
+
 /* Smooth scrolling */
 * {
   -webkit-tap-highlight-color: transparent;

@@ -14,7 +14,7 @@ export const MicButton: React.FC<MicButtonProps> = ({ isRecording, onClick }) =>
         className={`
           w-16 h-16 rounded-full flex items-center justify-center 
           transition-all duration-300 ease-out
-          focus:outline-none focus:ring-4 focus:ring-offset-2
+          focus:outline-none focus-visible:outline-none focus:ring-0 focus:ring-offset-0
           active:scale-95
           ${isRecording 
             ? 'bg-gradient-to-br from-red-500 to-red-600 text-white shadow-lg shadow-red-500/30 animate-pulse-scale' 

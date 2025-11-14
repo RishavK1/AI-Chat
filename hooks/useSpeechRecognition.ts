@@ -40,7 +40,7 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
     const recognition = new SpeechRecognition();
     
     // Enhanced recognition settings for better accuracy
-    recognition.continuous = false; // Auto-stop on pause
+    recognition.continuous = true; // Keep listening until manually stopped
     recognition.interimResults = true; // Show real-time results
     recognition.lang = 'en-US'; // US English for better technical term recognition
     

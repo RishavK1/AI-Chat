@@ -82,6 +82,54 @@ const App: React.FC = () => {
     [persistSessionMessages],
   );
 
+  const handleGetAnswer = useCallback(
+    async (question: string) => {
+      setIsGenerating(true);
+      const modelMessageId = Date.now();
+
+      // Add an empty message shell for the streaming response
+      updateMessages((prev) => [
+        ...prev,
+        { id: modelMessageId, role: 'model', content: '', isFinal: false },
+      ]);
+
+      try {
+        const onChunk = (chunk: string) => {
+          updateMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === modelMessageId ? { ...msg, content: msg.content + chunk } : msg,
+            ),
+          );
+        };
+
+        await generateAnswerWithProvider(question, onChunk, providerSettings);
+      } catch (error) {
+        console.error('Error generating answer:', error);
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : "Sorry, I couldn't generate an answer. Please try again.";
+        updateMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === modelMessageId
+              ? {
+                  ...msg,
+                  content: errorMessage,
+                }
+              : msg,
+          ),
+        );
+      } finally {
+        // Finalize the message state
+        updateMessages((prev) =>
+          prev.map((msg) => (msg.id === modelMessageId ? { ...msg, isFinal: true } : msg)),
+        );
+        setIsGenerating(false);
+      }
+    },
+    [updateMessages, providerSettings],
+  );
+
   const handleNewTranscript = useCallback(
     (transcript: string) => {
       if (transcript) {
@@ -94,9 +142,11 @@ const App: React.FC = () => {
             isFinal: true,
           },
         ]);
+        // Automatically generate answer when transcript is received
+        handleGetAnswer(transcript);
       }
     },
-    [updateMessages],
+    [updateMessages, handleGetAnswer],
   );
 
   const { isRecording, transcript, startRecording, stopRecording, cancelRecording } =
@@ -105,52 +155,6 @@ const App: React.FC = () => {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, transcript]);
-
-  const handleGetAnswer = async (question: string) => {
-    setIsGenerating(true);
-    const modelMessageId = Date.now();
-
-    // Add an empty message shell for the streaming response
-    updateMessages((prev) => [
-      ...prev,
-      { id: modelMessageId, role: 'model', content: '', isFinal: false },
-    ]);
-
-    try {
-      const onChunk = (chunk: string) => {
-        updateMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === modelMessageId ? { ...msg, content: msg.content + chunk } : msg,
-          ),
-        );
-      };
-
-      await generateAnswerWithProvider(question, onChunk, providerSettings);
-
-    } catch (error) {
-      console.error('Error generating answer:', error);
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Sorry, I couldn't generate an answer. Please try again.";
-      updateMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === modelMessageId
-            ? {
-                ...msg,
-                content: errorMessage,
-              }
-            : msg,
-        ),
-      );
-    } finally {
-      // Finalize the message state
-      updateMessages((prev) =>
-        prev.map((msg) => (msg.id === modelMessageId ? { ...msg, isFinal: true } : msg)),
-      );
-      setIsGenerating(false);
-    }
-  };
 
   const handleUpdateMessage = (id: number, newContent: string) => {
     updateMessages((prev) =>
@@ -166,21 +170,14 @@ const App: React.FC = () => {
     if (isRecording) {
       stopRecording();
     } else {
-      // If the user starts a new recording and the last message is an unanswered
-      // user question, remove it to allow for a clean re-take.
-      updateMessages((prev) => {
-        const lastMessage = prev[prev.length - 1];
-        if (lastMessage && lastMessage.role === 'user') {
-          return prev.slice(0, -1);
-        }
-        return prev;
-      });
+      updateMessages((prev) => prev);
       startRecording();
     }
   };
 
   const handleCancelListening = () => {
     cancelRecording();
+    updateMessages((prev) => prev.filter((msg) => !(msg.role === 'user' && !msg.isFinal)));
   };
 
   const handleStartNewSession = useCallback(() => {
@@ -295,7 +292,7 @@ const App: React.FC = () => {
   const isAppReady = isHydrated && Boolean(currentSession);
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-50 to-slate-100 font-sans">
+    <div className="flex h-screen w-full max-w-full bg-gradient-to-br from-slate-50 to-slate-100 font-sans overflow-x-hidden">
       <ChatHistorySidebar
         sessions={sessions}
         activeSessionId={activeSessionId}
@@ -305,25 +302,27 @@ const App: React.FC = () => {
         onNewSession={handleStartNewSession}
         onClearHistory={handleClearHistory}
       />
-      <div className="flex-1 flex flex-col max-h-screen">
-        <header className="px-4 py-3 bg-white/80 backdrop-blur-sm border-b border-slate-200/50 shadow-sm sticky top-0 z-20 flex items-center justify-between gap-2">
+      <div className="flex-1 flex flex-col max-h-screen w-full">
+        <header className="px-3 sm:px-4 py-3 bg-white/80 backdrop-blur-sm border-b border-slate-200/50 shadow-sm sticky top-0 z-20 flex items-center justify-between gap-2 flex-wrap">
           <button
             onClick={() => setIsSidebarOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition lg:hidden"
+            className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2 sm:px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition lg:hidden"
+            aria-label="Open history"
           >
             <HistoryIcon className="w-4 h-4" />
-            History
+            <span className="hidden sm:inline sm:ml-1">History</span>
           </button>
-          <h1 className="text-lg font-semibold text-slate-800 text-center flex-1">
+          <h1 className="text-base sm:text-lg font-semibold text-slate-800 text-center flex-1 min-w-[140px]">
             QuickInterview AI
           </h1>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsSettingsOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+              className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2 sm:px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+              aria-label="Open settings"
             >
               <SettingsIcon className="w-4 h-4" />
-              Settings
+              <span className="hidden sm:inline sm:ml-1">Settings</span>
             </button>
             <button
               onClick={handleStartNewSession}
@@ -336,7 +335,7 @@ const App: React.FC = () => {
         </header>
         <main
           ref={chatContainerRef}
-          className="flex-1 overflow-y-auto px-3 py-4 space-y-3 scroll-smooth"
+          className="flex-1 w-full overflow-y-auto px-3 py-4 space-y-3 scroll-smooth"
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
           {isAppReady && chatMessages.length === 0 && !isRecording && <WelcomeMessage />}
@@ -344,8 +343,6 @@ const App: React.FC = () => {
             <ChatBubble
               key={msg.id}
               message={msg}
-              onGetAnswer={handleGetAnswer}
-              onUpdateMessage={handleUpdateMessage}
               onDeleteMessage={handleDeleteMessage}
             />
           ))}
@@ -364,7 +361,7 @@ const App: React.FC = () => {
             {(isRecording || transcript) && (
               <button
                 onClick={handleCancelListening}
-                className="w-11 h-11 rounded-full border border-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-50 active:scale-95 transition shadow-sm"
+                className="w-11 h-11 rounded-full border border-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-50 active:scale-95 transition shadow-sm focus:outline-none focus-visible:outline-none"
                 aria-label="Cancel listening"
               >
                 <CloseIcon className="w-5 h-5" />

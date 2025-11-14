@@ -116,7 +116,7 @@ export const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
       </aside>
 
       <div
-        className={`fixed inset-0 z-20 transition pointer-events-none lg:hidden ${
+        className={`fixed inset-0 z-50 transition pointer-events-none lg:hidden ${
           isOpen ? 'pointer-events-auto' : ''
         }`}
         aria-hidden={!isOpen}
@@ -128,7 +128,7 @@ export const ChatHistorySidebar: React.FC<ChatHistorySidebarProps> = ({
           onClick={onClose}
         />
         <aside
-          className={`absolute left-0 top-0 bottom-0 w-72 max-w-[85%] bg-white shadow-xl border-r border-slate-200 flex flex-col transform transition-transform duration-300 ${
+          className={`absolute left-0 top-0 bottom-0 w-72 max-w-[85%] bg-white shadow-xl border-r border-slate-200 flex flex-col transform transition-transform duration-300 z-50 ${
             isOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
