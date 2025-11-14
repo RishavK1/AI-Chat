@@ -8,6 +8,7 @@ import { WelcomeMessage } from './components/WelcomeMessage';
 import { ChatHistorySidebar } from './components/ChatHistorySidebar';
 import { HistoryIcon } from './components/icons/HistoryIcon';
 import { PlusIcon } from './components/icons/PlusIcon';
+import { CloseIcon } from './components/icons/CloseIcon';
 
 const STORAGE_KEY = 'quickinterview_sessions_v1';
 
@@ -91,7 +92,7 @@ const App: React.FC = () => {
     [updateMessages],
   );
 
-  const { isRecording, transcript, startRecording, stopRecording } =
+  const { isRecording, transcript, startRecording, stopRecording, cancelRecording } =
     useSpeechRecognition({ onStop: handleNewTranscript });
 
   useEffect(() => {
@@ -169,6 +170,10 @@ const App: React.FC = () => {
       });
       startRecording();
     }
+  };
+
+  const handleCancelListening = () => {
+    cancelRecording();
   };
 
   const handleStartNewSession = useCallback(() => {
@@ -315,7 +320,18 @@ const App: React.FC = () => {
           <div ref={chatEndRef} className="h-2" />
         </main>
         <footer className="px-4 py-4 bg-white/80 backdrop-blur-sm border-t border-slate-200/50 safe-area-inset-bottom">
-          <MicButton isRecording={isRecording} onClick={toggleRecording} />
+          <div className="flex items-center justify-center gap-3">
+            <MicButton isRecording={isRecording} onClick={toggleRecording} />
+            {(isRecording || transcript) && (
+              <button
+                onClick={handleCancelListening}
+                className="w-11 h-11 rounded-full border border-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-50 active:scale-95 transition shadow-sm"
+                aria-label="Cancel listening"
+              >
+                <CloseIcon className="w-5 h-5" />
+              </button>
+            )}
+          </div>
         </footer>
       </div>
     </div>

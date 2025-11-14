@@ -17,6 +17,7 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
   // constant shadows the global `SpeechRecognition` type, which might not be available
   // in the TypeScript environment, preventing a "cannot find name" error.
   const recognitionRef = useRef<any | null>(null);
+  const skipOnStopRef = useRef(false);
 
   // Ref to hold the latest recording state to avoid stale closures in callbacks.
   const isRecordingRef = useRef(isRecording);
@@ -72,13 +73,14 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
       setIsRecording(false);
       // Only trigger the onStop callback if we have a meaningful transcript.
       // This prevents creating empty messages when recognition stops due to silence.
-      if (options.onStop && transcriptRef.current.trim()) {
+      if (!skipOnStopRef.current && options.onStop && transcriptRef.current.trim()) {
         // Apply final post-processing before sending
         const finalTranscript = postProcessTranscript(transcriptRef.current.trim());
         if (finalTranscript.length > 0) {
           options.onStop(finalTranscript);
         }
       }
+      skipOnStopRef.current = false;
       setTranscript('');
     };
 
@@ -178,5 +180,14 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
     }
   }, []);
 
-  return { isRecording, transcript, startRecording, stopRecording };
+  const cancelRecording = useCallback(() => {
+    skipOnStopRef.current = true;
+    if (recognitionRef.current && isRecordingRef.current) {
+      recognitionRef.current.stop();
+    }
+    setTranscript('');
+    transcriptRef.current = '';
+  }, []);
+
+  return { isRecording, transcript, startRecording, stopRecording, cancelRecording };
 };
