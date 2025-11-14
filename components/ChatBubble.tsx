@@ -2,17 +2,32 @@ import React, { useState, useEffect } from 'react';
 import type { ChatMessage } from '../types';
 import { CopyIcon } from './icons/CopyIcon';
 import { CheckIcon } from './icons/CheckIcon';
+import { CloseIcon } from './icons/CloseIcon';
 
 interface ChatBubbleProps {
   message: ChatMessage;
   onGetAnswer: (question: string) => void;
   onUpdateMessage: (id: number, content: string) => void;
+  onDeleteMessage: (id: number) => void;
 }
 
-export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, onGetAnswer, onUpdateMessage }) => {
+export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, onGetAnswer, onUpdateMessage, onDeleteMessage }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(message.content);
   const [copied, setCopied] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    // Detect if device is mobile/touch device
+    const checkMobile = () => {
+      const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      const isSmallScreen = window.innerWidth <= 768;
+      setIsMobile(isTouchDevice && isSmallScreen);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     // Automatically enter edit mode for the user's latest finalized question
@@ -56,15 +71,28 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, onGetAnswer, on
               onChange={(e) => setEditedContent(e.target.value)}
               className="w-full bg-blue-400 text-white p-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-white placeholder-blue-200"
               rows={3}
-              autoFocus
-              onFocus={(e) => e.currentTarget.select()}
+              readOnly={isMobile}
+              onFocus={(e) => {
+                if (isMobile) {
+                  e.currentTarget.blur();
+                }
+              }}
             />
-            <button
-              onClick={handleAnswerClick}
-              className="bg-white text-blue-500 font-bold py-2 px-4 rounded-lg self-end hover:bg-gray-100 transition-colors"
-            >
-              Answer
-            </button>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => onDeleteMessage(message.id)}
+                className="bg-red-500 text-white p-2 rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center"
+                aria-label="Delete message and restart recording"
+              >
+                <CloseIcon className="w-5 h-5" />
+              </button>
+              <button
+                onClick={handleAnswerClick}
+                className="bg-white text-blue-500 font-bold py-2 px-4 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Answer
+              </button>
+            </div>
           </div>
         ) : (
           <div className="relative group">

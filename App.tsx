@@ -91,6 +91,14 @@ const App: React.FC = () => {
     );
   };
 
+  const handleDeleteMessage = (id: number) => {
+    setChatMessages(prev => prev.filter(msg => msg.id !== id));
+    // Start recording immediately after deleting
+    if (!isRecording) {
+      startRecording();
+    }
+  };
+
   const toggleRecording = () => {
     if (isRecording) {
       stopRecording();
@@ -121,6 +129,7 @@ const App: React.FC = () => {
             message={msg} 
             onGetAnswer={handleGetAnswer}
             onUpdateMessage={handleUpdateMessage}
+            onDeleteMessage={handleDeleteMessage}
           />
         ))}
         {isRecording && transcript && (
