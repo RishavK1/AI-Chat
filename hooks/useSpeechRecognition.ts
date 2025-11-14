@@ -19,8 +19,8 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
   const recognitionRef = useRef<any | null>(null);
   const skipOnStopRef = useRef(false);
   const isManualStopRef = useRef(false); // Track if stop was manual
-  const lastProcessedIndexRef = useRef(0); // Track last processed result index (prevents duplicates)
-  const finalTranscriptPartsRef = useRef<string[]>([]); // Store final parts to prevent duplicates
+  const accumulatedFinalRef = useRef(''); // Accumulate final transcript parts
+  const seenFinalResultsRef = useRef<Set<string>>(new Set()); // Track seen final results to prevent duplicates
 
   // Ref to hold the latest recording state to avoid stale closures in callbacks.
   const isRecordingRef = useRef(isRecording);
@@ -71,8 +71,8 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
       setTranscript('');
       transcriptRef.current = '';
       isManualStopRef.current = false;
-      lastProcessedIndexRef.current = 0;
-      finalTranscriptPartsRef.current = [];
+      accumulatedFinalRef.current = '';
+      seenFinalResultsRef.current = new Set();
     };
 
     recognition.onend = () => {
@@ -80,19 +80,24 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
       
       // Only trigger the onStop callback if it was manually stopped and not skipped
       if (!skipOnStopRef.current && isManualStopRef.current && options.onStop && transcriptRef.current.trim()) {
-        // Apply final post-processing before sending
-        const finalTranscript = postProcessTranscript(transcriptRef.current.trim());
-        if (finalTranscript.length > 0) {
-          options.onStop(finalTranscript);
+        // Use the accumulated final transcript
+        const finalText = accumulatedFinalRef.current.trim() || transcriptRef.current.trim();
+        if (finalText) {
+          // Apply final post-processing before sending
+          const finalTranscript = postProcessTranscript(finalText);
+          if (finalTranscript.length > 0) {
+            // Call onStop with the transcript - don't clear transcript here
+            options.onStop(finalTranscript);
+          }
         }
       }
       
-      // Reset state
+      // Reset state but keep transcript visible
       skipOnStopRef.current = false;
       isManualStopRef.current = false;
-      setTranscript('');
-      lastProcessedIndexRef.current = 0;
-      finalTranscriptPartsRef.current = [];
+      accumulatedFinalRef.current = '';
+      seenFinalResultsRef.current = new Set();
+      // Don't clear transcript - let it stay visible
     };
 
     recognition.onerror = (event: any) => {
@@ -107,73 +112,47 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
     };
 
     recognition.onresult = (event: any) => {
-      let interimTranscript = '';
+      // Process results - only add NEW final results to prevent duplicates
+      let interimText = '';
       const newFinalParts: string[] = [];
 
-      // Always process only NEW results to prevent duplicates (works for both mobile and desktop)
-      const startIndex = lastProcessedIndexRef.current;
-
-      for (let i = startIndex; i < event.results.length; ++i) {
+      // Process all results but only add ones we haven't seen
+      for (let i = 0; i < event.results.length; ++i) {
         const result = event.results[i];
-        const transcript = result[0]?.transcript?.trim() || '';
-        const confidence = result[0]?.confidence || 0;
+        if (!result) continue;
         
+        const transcript = result[0]?.transcript?.trim() || '';
         if (!transcript) continue;
         
         if (result.isFinal) {
-          // For final results, use the best alternative if available
-          let bestTranscript = transcript;
-          let bestConfidence = confidence;
-          
-          // Check alternatives if available
-          if (result.length > 1) {
-            for (let j = 0; j < result.length; j++) {
-              const alt = result[j];
-              const altConfidence = alt.confidence || 0;
-              if (altConfidence > bestConfidence) {
-                bestTranscript = alt.transcript?.trim() || bestTranscript;
-                bestConfidence = altConfidence;
-              }
-            }
-          }
-          
-          // Only use final results with reasonable confidence (>0.2) or if it's the only option
-          if (bestConfidence > 0.2 || result.length === 1) {
-            if (bestTranscript) {
-              newFinalParts.push(bestTranscript);
-            }
-          } else if (transcript) {
-            // Low confidence, but use it anyway if no better option
+          // Only add if we haven't seen this exact final result before
+          if (!seenFinalResultsRef.current.has(transcript)) {
+            seenFinalResultsRef.current.add(transcript);
             newFinalParts.push(transcript);
           }
         } else {
-          // For interim results, use only the LAST interim result (most recent)
-          interimTranscript = transcript;
+          // Use only the last interim result
+          interimText = transcript;
         }
       }
       
-      // Update the last processed index
-      lastProcessedIndexRef.current = event.results.length;
-      
-      // Add new final parts to stored array
+      // Add new final parts to accumulated text
       if (newFinalParts.length > 0) {
-        finalTranscriptPartsRef.current.push(...newFinalParts);
+        if (accumulatedFinalRef.current) {
+          accumulatedFinalRef.current += ' ' + newFinalParts.join(' ');
+        } else {
+          accumulatedFinalRef.current = newFinalParts.join(' ');
+        }
       }
       
-      // Build final transcript from stored parts
-      const finalTranscript = finalTranscriptPartsRef.current.join(' ');
-      const fullTranscript = finalTranscript + (interimTranscript ? ' ' + interimTranscript : '');
+      // Build display transcript: accumulated final + current interim
+      const finalText = accumulatedFinalRef.current;
+      const displayText = finalText + (interimText ? ' ' + interimText : '');
       
       // Apply post-processing for technical term corrections
-      let processedTranscript = fullTranscript.trim();
+      let processedTranscript = displayText.trim();
       if (processedTranscript) {
-        if (interimTranscript && !finalTranscript) {
-          // Only interim - process it
-          processedTranscript = postProcessTranscript(interimTranscript);
-        } else if (finalTranscript) {
-          // We have final results - process the full transcript
-          processedTranscript = postProcessTranscript(fullTranscript);
-        }
+        processedTranscript = postProcessTranscript(processedTranscript);
       }
       
       setTranscript(processedTranscript);
@@ -215,8 +194,8 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
     }
     setTranscript('');
     transcriptRef.current = '';
-    lastProcessedIndexRef.current = 0;
-    finalTranscriptPartsRef.current = [];
+    accumulatedFinalRef.current = '';
+    seenFinalResultsRef.current = new Set();
   }, []);
 
   return { isRecording, transcript, startRecording, stopRecording, cancelRecording };
