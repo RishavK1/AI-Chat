@@ -265,7 +265,7 @@ const App: React.FC = () => {
   const isAppReady = isHydrated && Boolean(currentSession);
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-50 to-slate-100 font-sans overflow-hidden">
+    <div className="flex h-screen bg-gradient-to-br from-slate-50 to-slate-100 font-sans">
       <ChatHistorySidebar
         sessions={sessions}
         activeSessionId={activeSessionId}
@@ -276,7 +276,7 @@ const App: React.FC = () => {
         onClearHistory={handleClearHistory}
       />
       <div className="flex-1 flex flex-col max-h-screen">
-        <header className="px-4 py-3 bg-white/80 backdrop-blur-sm border-b border-slate-200/50 shadow-sm sticky top-0 z-10 flex items-center justify-between gap-2">
+        <header className="px-4 py-3 bg-white/80 backdrop-blur-sm border-b border-slate-200/50 shadow-sm sticky top-0 z-20 flex items-center justify-between gap-2">
           <button
             onClick={() => setIsSidebarOpen(true)}
             className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition lg:hidden"
@@ -319,7 +319,7 @@ const App: React.FC = () => {
           )}
           <div ref={chatEndRef} className="h-2" />
         </main>
-        <footer className="px-4 py-4 bg-white/80 backdrop-blur-sm border-t border-slate-200/50 safe-area-inset-bottom">
+        <footer className="px-4 py-4 bg-white/90 backdrop-blur-sm border-t border-slate-200/50 safe-area-inset-bottom sticky bottom-0 z-20">
           <div className="flex items-center justify-center gap-3">
             <MicButton isRecording={isRecording} onClick={toggleRecording} />
             {(isRecording || transcript) && (
