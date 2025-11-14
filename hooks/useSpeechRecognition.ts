@@ -19,21 +19,8 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
   const recognitionRef = useRef<any | null>(null);
   const skipOnStopRef = useRef(false);
   const isManualStopRef = useRef(false); // Track if stop was manual
-  const lastProcessedIndexRef = useRef(0); // Track last processed result index (for mobile duplicates)
+  const lastProcessedIndexRef = useRef(0); // Track last processed result index (prevents duplicates)
   const finalTranscriptPartsRef = useRef<string[]>([]); // Store final parts to prevent duplicates
-  const isMobileRef = useRef(false); // Detect if mobile
-
-  // Detect mobile device
-  useEffect(() => {
-    const checkMobile = () => {
-      const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-      const isSmallScreen = window.innerWidth <= 768;
-      isMobileRef.current = isTouchDevice && isSmallScreen;
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
 
   // Ref to hold the latest recording state to avoid stale closures in callbacks.
   const isRecordingRef = useRef(isRecording);
@@ -120,12 +107,11 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
     };
 
     recognition.onresult = (event: any) => {
-      let finalTranscript = '';
       let interimTranscript = '';
+      const newFinalParts: string[] = [];
 
-      // On mobile: only process NEW results to prevent duplicates
-      // On desktop: process all results (works fine there)
-      const startIndex = isMobileRef.current ? lastProcessedIndexRef.current : 0;
+      // Always process only NEW results to prevent duplicates (works for both mobile and desktop)
+      const startIndex = lastProcessedIndexRef.current;
 
       for (let i = startIndex; i < event.results.length; ++i) {
         const result = event.results[i];
@@ -154,20 +140,11 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
           // Only use final results with reasonable confidence (>0.2) or if it's the only option
           if (bestConfidence > 0.2 || result.length === 1) {
             if (bestTranscript) {
-              // On mobile: store in array to prevent duplicates
-              if (isMobileRef.current) {
-                finalTranscriptPartsRef.current.push(bestTranscript);
-              } else {
-                finalTranscript += (finalTranscript ? ' ' : '') + bestTranscript;
-              }
+              newFinalParts.push(bestTranscript);
             }
           } else if (transcript) {
             // Low confidence, but use it anyway if no better option
-            if (isMobileRef.current) {
-              finalTranscriptPartsRef.current.push(transcript);
-            } else {
-              finalTranscript += (finalTranscript ? ' ' : '') + transcript;
-            }
+            newFinalParts.push(transcript);
           }
         } else {
           // For interim results, use only the LAST interim result (most recent)
@@ -175,13 +152,16 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
         }
       }
       
-      // Update the last processed index (mobile only)
-      if (isMobileRef.current) {
-        lastProcessedIndexRef.current = event.results.length;
-        // Build final transcript from stored parts
-        finalTranscript = finalTranscriptPartsRef.current.join(' ');
+      // Update the last processed index
+      lastProcessedIndexRef.current = event.results.length;
+      
+      // Add new final parts to stored array
+      if (newFinalParts.length > 0) {
+        finalTranscriptPartsRef.current.push(...newFinalParts);
       }
       
+      // Build final transcript from stored parts
+      const finalTranscript = finalTranscriptPartsRef.current.join(' ');
       const fullTranscript = finalTranscript + (interimTranscript ? ' ' + interimTranscript : '');
       
       // Apply post-processing for technical term corrections
