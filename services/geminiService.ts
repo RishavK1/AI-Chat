@@ -1,4 +1,5 @@
 import { ApiError, GoogleGenAI } from "@google/genai";
+import { correctTechnicalTerms } from '../utils/speechCorrections';
 
 if (!process.env.API_KEY) {
   console.warn(
@@ -14,141 +15,77 @@ const INITIAL_RETRY_DELAY_MS = 1_000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Common technical term misrecognitions from speech-to-text
-const TECHNICAL_CORRECTIONS: Record<string, string> = {
-  // Data types and programming
-  'care': 'char',
-  'chair': 'char',
-  'car': 'char',
-  'int': 'int',
-  'integer': 'int',
-  'string': 'string',
-  'bool': 'bool',
-  'boolean': 'bool',
-  'float': 'float',
-  'double': 'double',
-  'void': 'void',
-  
-  // Programming concepts
-  'array': 'array',
-  'arry': 'array',
-  'function': 'function',
-  'variable': 'variable',
-  'loop': 'loop',
-  'class': 'class',
-  'object': 'object',
-  'method': 'method',
-  'interface': 'interface',
-  'inheritance': 'inheritance',
-  'polymorphism': 'polymorphism',
-  'encapsulation': 'encapsulation',
-  'abstraction': 'abstraction',
-  
-  // Data structures
-  'list': 'list',
-  'stack': 'stack',
-  'queue': 'queue',
-  'tree': 'tree',
-  'graph': 'graph',
-  'hash': 'hash',
-  'map': 'map',
-  'set': 'set',
-  
-  // Algorithms
-  'sorting': 'sorting',
-  'searching': 'searching',
-  'binary search': 'binary search',
-  'quick sort': 'quicksort',
-  'merge sort': 'merge sort',
-  'bubble sort': 'bubble sort',
-  
-  // Technologies
-  'react': 'React',
-  'node': 'Node.js',
-  'javascript': 'JavaScript',
-  'typescript': 'TypeScript',
-  'python': 'Python',
-  'java': 'Java',
-  'c plus plus': 'C++',
-  'c sharp': 'C#',
-  'sql': 'SQL',
-  'html': 'HTML',
-  'css': 'CSS',
-  'api': 'API',
-  'rest': 'REST',
-  'json': 'JSON',
-  'xml': 'XML',
-  
-  // System/OS concepts
-  'operating system': 'operating system',
-  'os': 'OS',
-  'database': 'database',
-  'db': 'database',
-  'server': 'server',
-  'client': 'client',
-  'network': 'network',
-  'protocol': 'protocol',
-  'http': 'HTTP',
-  'https': 'HTTPS',
-  'tcp': 'TCP',
-  'ip': 'IP',
-  'dns': 'DNS',
-  
-  // Engineering concepts
-  'algorithm': 'algorithm',
-  'data structure': 'data structure',
-  'time complexity': 'time complexity',
-  'space complexity': 'space complexity',
-  'big o': 'Big O',
-  'o of n': 'O(n)',
-  'design pattern': 'design pattern',
-  'microservice': 'microservice',
-  'docker': 'Docker',
-  'kubernetes': 'Kubernetes',
-  'aws': 'AWS',
-  'cloud': 'cloud',
-};
+const JAVASCRIPT_TOPICS = [
+  'javascript',
+  'js',
+  'node',
+  'node.js',
+  'react',
+  'angular',
+  'vue',
+  'svelte',
+  'express',
+  'next.js',
+  'vite',
+  'async',
+  'await',
+  'promise',
+  'closure',
+  'hoisting',
+  'prototype',
+  'event loop',
+  'call stack',
+  'scope',
+  'dom',
+  'web api',
+  'browser api',
+  'es6',
+  'typescript',
+  'webpack',
+  'babel',
+  'jest',
+  'cypress',
+  'closure',
+  'callbacks',
+  'modules',
+  'import',
+  'export',
+  'rest parameter',
+  'spread operator',
+];
 
-/**
- * Corrects common technical term misrecognitions in speech-to-text
- */
-const correctTechnicalTerms = (text: string): string => {
-  let corrected = text.toLowerCase();
-  
-  // Replace common misrecognitions
-  Object.entries(TECHNICAL_CORRECTIONS).forEach(([wrong, correct]) => {
-    // Use word boundaries to avoid partial matches
-    const regex = new RegExp(`\\b${wrong}\\b`, 'gi');
-    corrected = corrected.replace(regex, correct);
-  });
-  
-  // Special handling for "char" - very common misrecognition
-  // If we see "care" or "chair" in a programming context, replace with "char"
-  if (/\b(care|chair)\b/i.test(corrected) && 
-      (/\b(int|string|bool|float|double|void|data\s*type|programming|code)\b/i.test(corrected) ||
-       /\b(explain|what|difference|between|define|describe)\b/i.test(corrected))) {
-    corrected = corrected.replace(/\b(care|chair)\b/gi, 'char');
-  }
-  
-  return corrected;
-};
+const JAVASCRIPT_REGEX = new RegExp(
+  `\\b(${JAVASCRIPT_TOPICS.map((topic) =>
+    topic.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+  ).join('|')})\\b`,
+  'i',
+);
 
 /**
  * Enhances the question with context for better understanding
  */
 const enhanceQuestion = (question: string): string => {
   const corrected = correctTechnicalTerms(question);
+  const hasJavaScriptKeyword = JAVASCRIPT_REGEX.test(corrected);
   
   // Add context if it's clearly a technical question
   const isTechnicalQuestion = 
     /\b(explain|what|how|why|define|describe|difference|between|compare|algorithm|data\s*structure|programming|code|technology|system|design|implementation)\b/i.test(corrected) ||
     /\b(int|char|string|bool|float|array|function|class|object|method|interface|api|database|server|client)\b/i.test(corrected);
   
+  let contextualized = corrected;
+
+  if (!hasJavaScriptKeyword) {
+    contextualized = `[JavaScript Interview Context] ${contextualized}`;
+  } else {
+    contextualized = `[JavaScript Topic Identified] ${contextualized}`;
+  }
+
   if (isTechnicalQuestion) {
-    return `[Engineering/Technical Interview Question] ${corrected}`;
+    return `[Engineering/Technical Interview Question] ${contextualized}`;
   }
   
-  return corrected;
+  return contextualized;
 };
 
 export const generateAnswerStream = async (
@@ -157,22 +94,22 @@ export const generateAnswerStream = async (
 ): Promise<void> => {
   let attempt = 0;
   
-  // Enhanced system instruction for engineering interviews
-  const systemInstruction = `You are an expert engineering interview coach specializing in technical interviews for engineering students. Your role is to provide clear, educational, and technically accurate answers.
+  // Enhanced system instruction with JavaScript focus
+  const systemInstruction = `You are an expert JavaScript engineering interview coach. You specialize in front-end and full-stack JavaScript interviews (JavaScript, Node.js, frameworks, tooling) and your role is to provide clear, educational, and technically accurate answers.
 
 CRITICAL INSTRUCTIONS:
-1. Focus ONLY on engineering, programming, computer science, and technology concepts
-2. If a question contains slight misrecognitions (e.g., "care" instead of "char"), automatically interpret the most likely technical term based on context
-3. Give educational, technical answers - NOT general knowledge or non-technical explanations
-4. When asked about programming concepts (like "int and char"), explain them as data types, not general words
-5. Keep answers concise (45-60 words) and interview-ready
-6. Use proper technical terminology
-7. If the question is unclear but seems technical, infer the most likely technical interpretation
-8. Always assume the context is engineering/computer science unless explicitly otherwise
+1. Treat EVERY question as a JavaScript-focused interview prompt unless it explicitly targets another stack.
+2. Cover language fundamentals (ES6+ features, closures, prototypes, async patterns, event loop), browser APIs, Node.js runtime, React/SPA architecture, testing, tooling, performance, and best practices.
+3. If speech recognition introduces slight misrecognitions (e.g., "care" instead of "char", "jason" instead of "JSON"), automatically interpret the most likely JavaScript term.
+4. Give educational, technical answers—not general definitions—highlighting why the concept matters in interviews and real projects.
+5. Keep answers concise (45-60 words) and interview-ready, but prioritize clarity over brevity when a concept needs detail.
+6. Use precise JavaScript terminology and include code-level reasoning when appropriate (without long code blocks).
+7. When a question is vague, infer the closest JavaScript topic (e.g., if asked "explain hosting", answer about hoisting in JavaScript).
+8. If a question truly lies outside JavaScript, briefly answer it but relate back to JavaScript perspectives when possible.
 
-Example: If asked "explain int and care datatype", understand this means "int and char datatype" and explain both as programming data types, not the word "care".
+Example: If asked "explain int and care datatype", interpret it as a JavaScript data type question (number vs char/string) and ground the answer in JavaScript context.
 
-Output format: Direct, technical, educational answer suitable for an engineering interview.`;
+Output format: Direct, technical, educational answer suitable for a JavaScript interview (45-60 words).`;
 
   // Preprocess the question to correct misrecognitions and add context
   const enhancedQuestion = enhanceQuestion(question);

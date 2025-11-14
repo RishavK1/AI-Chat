@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { postProcessTranscript } from '../utils/speechCorrections';
 
 interface SpeechRecognitionOptions {
   onStop?: (transcript: string) => void;
@@ -36,10 +37,30 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
     }
 
     const recognition = new SpeechRecognition();
-    // By setting continuous to false, the recognition automatically stops when the user pauses.
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
+    
+    // Enhanced recognition settings for better accuracy
+    recognition.continuous = false; // Auto-stop on pause
+    recognition.interimResults = true; // Show real-time results
+    recognition.lang = 'en-US'; // US English for better technical term recognition
+    
+    // Try to set maxAlternatives if available (Chrome/Edge)
+    if ('maxAlternatives' in recognition) {
+      (recognition as any).maxAlternatives = 3; // Get multiple alternatives for better accuracy
+    }
+    
+    // Try to set grammars if available (for technical terms)
+    try {
+      if ('grammars' in recognition) {
+        // Create a grammar list for technical terms
+        const grammar = '#JSGF V1.0; grammar technical; public <technical> = char | int | string | array | function | class | object | algorithm | data structure;';
+        const grammarList = new (window as any).webkitSpeechGrammarList();
+        grammarList.addFromString(grammar, 1);
+        (recognition as any).grammars = grammarList;
+      }
+    } catch (e) {
+      // Grammar not supported, continue without it
+      console.debug('Speech grammar not supported');
+    }
 
     recognition.onstart = () => {
       setIsRecording(true);
@@ -52,7 +73,11 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
       // Only trigger the onStop callback if we have a meaningful transcript.
       // This prevents creating empty messages when recognition stops due to silence.
       if (options.onStop && transcriptRef.current.trim()) {
-        options.onStop(transcriptRef.current.trim());
+        // Apply final post-processing before sending
+        const finalTranscript = postProcessTranscript(transcriptRef.current.trim());
+        if (finalTranscript.length > 0) {
+          options.onStop(finalTranscript);
+        }
       }
       setTranscript('');
     };
@@ -71,17 +96,58 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
     recognition.onresult = (event: any) => {
       let finalTranscript = '';
       let interimTranscript = '';
+      let bestFinalTranscript = '';
 
-      // Rebuild the full transcript from all results to ensure accuracy.
+      // Rebuild the full transcript from all results with confidence filtering
       for (let i = 0; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
+        const result = event.results[i];
+        const transcript = result[0]?.transcript || '';
+        const confidence = result[0]?.confidence || 0;
+        
+        if (result.isFinal) {
+          // For final results, use the best alternative if available
+          let bestTranscript = transcript;
+          let bestConfidence = confidence;
+          
+          // Check alternatives if available
+          if (result.length > 1) {
+            for (let j = 0; j < result.length; j++) {
+              const alt = result[j];
+              if (alt.confidence > bestConfidence) {
+                bestTranscript = alt.transcript;
+                bestConfidence = alt.confidence;
+              }
+            }
+          }
+          
+          // Only use final results with reasonable confidence (>0.3) or if it's the only option
+          if (bestConfidence > 0.3 || result.length === 1) {
+            finalTranscript += (finalTranscript ? ' ' : '') + bestTranscript;
+            bestFinalTranscript = bestTranscript;
+          } else {
+            // Low confidence, but use it anyway if no better option
+            finalTranscript += (finalTranscript ? ' ' : '') + transcript;
+          }
         } else {
-          interimTranscript = event.results[i][0].transcript;
+          // For interim results, use the first (most confident) alternative
+          interimTranscript = transcript;
         }
       }
       
-      const fullTranscript = finalTranscript + interimTranscript;
+      // Combine final and interim, prioritizing final results
+      let fullTranscript = finalTranscript || interimTranscript;
+      
+      // Apply post-processing for technical term corrections
+      if (fullTranscript) {
+        // Process interim results in real-time for better UX
+        if (interimTranscript && !finalTranscript) {
+          fullTranscript = postProcessTranscript(interimTranscript);
+        } else if (finalTranscript) {
+          // For final results, apply more thorough processing
+          fullTranscript = postProcessTranscript(finalTranscript);
+        }
+      }
+      
       setTranscript(fullTranscript);
       transcriptRef.current = fullTranscript;
     };

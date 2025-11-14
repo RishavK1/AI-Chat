@@ -58,18 +58,18 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, onGetAnswer, on
   
   const bubbleAlignment = isUser ? 'justify-end' : 'justify-start';
   const bubbleStyles = isUser
-    ? 'bg-blue-500 text-white rounded-2xl rounded-br-none'
-    : 'bg-white text-gray-800 rounded-2xl rounded-bl-none shadow-sm';
+    ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl rounded-br-sm shadow-sm'
+    : 'bg-white text-slate-800 rounded-2xl rounded-bl-sm shadow-sm border border-slate-100';
     
   return (
-    <div className={`flex ${bubbleAlignment}`} data-message-id={message.id}>
-      <div className={`p-4 max-w-md md:max-w-lg lg:max-w-2xl break-words ${bubbleStyles}`}>
+    <div className={`flex ${bubbleAlignment} animate-fade-in`} data-message-id={message.id}>
+      <div className={`px-4 py-3 max-w-[85%] sm:max-w-md break-words ${bubbleStyles}`}>
         {isUser && isEditing ? (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             <textarea
               value={editedContent}
               onChange={(e) => setEditedContent(e.target.value)}
-              className="w-full bg-blue-400 text-white p-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-white placeholder-blue-200"
+              className="w-full bg-blue-400/90 text-white p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-white/50 placeholder-blue-100 text-sm resize-none"
               rows={3}
               readOnly={isMobile}
               onFocus={(e) => {
@@ -81,14 +81,14 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, onGetAnswer, on
             <div className="flex gap-2 justify-end">
               <button
                 onClick={() => onDeleteMessage(message.id)}
-                className="bg-red-500 text-white p-2 rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center"
+                className="bg-red-500/90 hover:bg-red-600 text-white p-2.5 rounded-xl transition-all duration-200 flex items-center justify-center active:scale-95 shadow-sm"
                 aria-label="Delete message and restart recording"
               >
-                <CloseIcon className="w-5 h-5" />
+                <CloseIcon className="w-4 h-4" />
               </button>
               <button
                 onClick={handleAnswerClick}
-                className="bg-white text-blue-500 font-bold py-2 px-4 rounded-lg hover:bg-gray-100 transition-colors"
+                className="bg-white/95 hover:bg-white text-blue-600 font-semibold py-2.5 px-5 rounded-xl transition-all duration-200 active:scale-95 shadow-sm text-sm"
               >
                 Answer
               </button>
@@ -96,30 +96,24 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, onGetAnswer, on
           </div>
         ) : (
           <div className="relative group">
-            <p className="whitespace-pre-wrap">
+            <p className="whitespace-pre-wrap text-sm leading-relaxed">
               {message.content}
               {!isUser && !message.isFinal && (
-                <span className="inline-block w-2 h-5 bg-gray-700 ml-1 animate-pulse" style={{ animation: 'blink 1s step-end infinite' }} />
+                <span className="inline-block w-1.5 h-4 bg-slate-400 ml-1.5 align-middle animate-blink" />
               )}
             </p>
             {!isUser && message.isFinal && (
               <button
                 onClick={handleCopyToClipboard}
-                className="absolute -top-2 -right-2 p-1.5 bg-gray-200 rounded-full text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                className="absolute -top-1.5 -right-1.5 p-1.5 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-600 opacity-0 group-hover:opacity-100 transition-all duration-200 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-blue-400 active:scale-95"
                 aria-label="Copy to clipboard"
               >
-                {copied ? <CheckIcon className="w-4 h-4 text-green-600" /> : <CopyIcon className="w-4 h-4" />}
+                {copied ? <CheckIcon className="w-3.5 h-3.5 text-green-600" /> : <CopyIcon className="w-3.5 h-3.5" />}
               </button>
             )}
           </div>
         )}
       </div>
-      <style>{`
-        @keyframes blink {
-          from, to { background-color: transparent; }
-          50% { background-color: #4B5563; } /* gray-700 */
-        }
-      `}</style>
     </div>
   );
 };
