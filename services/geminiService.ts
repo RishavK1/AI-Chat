@@ -1,13 +1,25 @@
 import { ApiError, GoogleGenAI } from "@google/genai";
 import { correctTechnicalTerms } from '../utils/speechCorrections';
 
-if (!process.env.API_KEY) {
+const DEFAULT_API_KEY = process.env.API_KEY;
+
+if (!DEFAULT_API_KEY) {
   console.warn(
     "API_KEY environment variable not set. App may not function correctly."
   );
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+const defaultClient = DEFAULT_API_KEY ? new GoogleGenAI({ apiKey: DEFAULT_API_KEY }) : null;
+
+const getGeminiClient = (apiKey?: string) => {
+  if (apiKey) {
+    return new GoogleGenAI({ apiKey });
+  }
+  if (defaultClient) {
+    return defaultClient;
+  }
+  throw new Error("Gemini API key not configured. Please provide a valid key.");
+};
 
 const model = 'gemini-2.5-flash';
 const MAX_RETRIES = 3;
@@ -88,9 +100,14 @@ const enhanceQuestion = (question: string): string => {
   return contextualized;
 };
 
+interface GeminiOptions {
+  apiKey?: string;
+}
+
 export const generateAnswerStream = async (
   question: string,
-  onChunk: (chunk: string) => void
+  onChunk: (chunk: string) => void,
+  options?: GeminiOptions
 ): Promise<void> => {
   let attempt = 0;
   
@@ -114,9 +131,11 @@ Output format: Direct, technical, educational answer suitable for a JavaScript i
   // Preprocess the question to correct misrecognitions and add context
   const enhancedQuestion = enhanceQuestion(question);
 
+  const client = getGeminiClient(options?.apiKey);
+
   while (attempt < MAX_RETRIES) {
     try {
-      const responseStream = await ai.models.generateContentStream({
+      const responseStream = await client.models.generateContentStream({
         model,
         contents: enhancedQuestion,
         config: {
@@ -140,7 +159,7 @@ Output format: Direct, technical, educational answer suitable for a JavaScript i
         error && typeof error === "object" && "status" in error
           ? Number((error as ApiError).status)
           : undefined;
-      const message =
+        const message =
         error && typeof error === "object" && "message" in error
           ? String((error as Error).message)
           : "Unknown error";

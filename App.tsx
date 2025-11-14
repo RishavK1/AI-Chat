@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useSpeechRecognition } from './hooks/useSpeechRecognition';
-import { generateAnswerStream } from './services/geminiService';
-import type { ChatMessage, ChatSession } from './types';
+import { generateAnswerWithProvider } from './services/aiProviderService';
+import type { ChatMessage, ChatSession, ProviderSettings } from './types';
 import { MicButton } from './components/MicButton';
 import { ChatBubble } from './components/ChatBubble';
 import { WelcomeMessage } from './components/WelcomeMessage';
@@ -9,8 +9,11 @@ import { ChatHistorySidebar } from './components/ChatHistorySidebar';
 import { HistoryIcon } from './components/icons/HistoryIcon';
 import { PlusIcon } from './components/icons/PlusIcon';
 import { CloseIcon } from './components/icons/CloseIcon';
+import { SettingsIcon } from './components/icons/SettingsIcon';
+import { SettingsModal } from './components/SettingsModal';
 
 const STORAGE_KEY = 'quickinterview_sessions_v1';
+const PROVIDER_STORAGE_KEY = 'quickinterview_provider_settings_v1';
 
 const createEmptySession = (): ChatSession => ({
   id:
@@ -38,7 +41,11 @@ const App: React.FC = () => {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string>('');
+  const [providerSettings, setProviderSettings] = useState<ProviderSettings>({
+    provider: 'default',
+  });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -118,7 +125,7 @@ const App: React.FC = () => {
         );
       };
 
-      await generateAnswerStream(question, onChunk);
+      await generateAnswerWithProvider(question, onChunk, providerSettings);
 
     } catch (error) {
       console.error('Error generating answer:', error);
@@ -242,6 +249,29 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    try {
+      const stored =
+        typeof window !== 'undefined' ? localStorage.getItem(PROVIDER_STORAGE_KEY) : null;
+      if (stored) {
+        setProviderSettings(JSON.parse(stored));
+      }
+    } catch (error) {
+      console.error('Failed to load provider settings:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PROVIDER_STORAGE_KEY, JSON.stringify(providerSettings));
+    } catch (error) {
+      console.error('Failed to save provider settings:', error);
+    }
+  }, [providerSettings]);
+
+  const handleSaveProviderSettings = (settings: ProviderSettings) => {
+    setProviderSettings(settings);
+  };
+  useEffect(() => {
     if (!isHydrated) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
@@ -287,13 +317,22 @@ const App: React.FC = () => {
           <h1 className="text-lg font-semibold text-slate-800 text-center flex-1">
             QuickInterview AI
           </h1>
-          <button
-            onClick={handleStartNewSession}
-            className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 text-white px-3 py-1.5 text-sm font-semibold hover:bg-slate-800 transition shadow-sm"
-          >
-            <PlusIcon className="w-4 h-4" />
-            New
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+            >
+              <SettingsIcon className="w-4 h-4" />
+              Settings
+            </button>
+            <button
+              onClick={handleStartNewSession}
+              className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 text-white px-3 py-1.5 text-sm font-semibold hover:bg-slate-800 transition shadow-sm"
+            >
+              <PlusIcon className="w-4 h-4" />
+              New
+            </button>
+          </div>
         </header>
         <main
           ref={chatContainerRef}
@@ -333,6 +372,13 @@ const App: React.FC = () => {
             )}
           </div>
         </footer>
+
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          settings={providerSettings}
+          onSave={handleSaveProviderSettings}
+        />
       </div>
     </div>
   );

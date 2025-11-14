@@ -13,3 +13,11 @@ export interface ChatSession {
   updatedAt: number;
   messages: ChatMessage[];
 }
+
+export type AIProvider = 'default' | 'gemini' | 'openai' | 'claude';
+
+export interface ProviderSettings {
+  provider: AIProvider;
+  apiKey?: string;
+  model?: string;
+}
