@@ -1,0 +1,7 @@
+{
+  "name": "QuickInterview AI",
+  "description": "An AI-powered interview coach that helps you practice by generating professional answers to your questions. Just speak your question, and get an interview-ready answer in seconds.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
