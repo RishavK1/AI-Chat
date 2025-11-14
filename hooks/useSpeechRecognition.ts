@@ -89,13 +89,9 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
     };
 
     recognition.onend = () => {
-      const wasRecording = isRecordingRef.current;
       setIsRecording(false);
       
-      // Only trigger the onStop callback if:
-      // 1. It wasn't skipped (canceled)
-      // 2. It was manually stopped (not auto-stopped on mobile)
-      // 3. We have a meaningful transcript
+      // Only trigger the onStop callback if it was manually stopped and not skipped
       if (!skipOnStopRef.current && isManualStopRef.current && options.onStop && transcriptRef.current.trim()) {
         // Apply final post-processing before sending
         const finalTranscript = postProcessTranscript(transcriptRef.current.trim());
@@ -104,22 +100,7 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
         }
       }
       
-      // On mobile, if it auto-stopped (not manual) and we were recording, restart listening
-      if (!skipOnStopRef.current && !isManualStopRef.current && isMobileRef.current && wasRecording) {
-        // Restart recognition on mobile if it auto-stopped
-        setTimeout(() => {
-          if (recognitionRef.current) {
-            try {
-              setIsRecording(true);
-              recognitionRef.current.start();
-            } catch (e) {
-              // Already started or error, ignore
-            }
-          }
-        }, 100);
-        return; // Don't clear transcript yet
-      }
-      
+      // Reset state
       skipOnStopRef.current = false;
       isManualStopRef.current = false;
       setTranscript('');
@@ -139,11 +120,11 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
     };
 
     recognition.onresult = (event: any) => {
+      let finalTranscript = '';
       let interimTranscript = '';
-      const newFinalParts: string[] = [];
 
-      // On mobile, only process NEW results to prevent duplicates
-      // On desktop, process all results (works fine there)
+      // On mobile: only process NEW results to prevent duplicates
+      // On desktop: process all results (works fine there)
       const startIndex = isMobileRef.current ? lastProcessedIndexRef.current : 0;
 
       for (let i = startIndex; i < event.results.length; ++i) {
@@ -173,11 +154,20 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
           // Only use final results with reasonable confidence (>0.2) or if it's the only option
           if (bestConfidence > 0.2 || result.length === 1) {
             if (bestTranscript) {
-              newFinalParts.push(bestTranscript);
+              // On mobile: store in array to prevent duplicates
+              if (isMobileRef.current) {
+                finalTranscriptPartsRef.current.push(bestTranscript);
+              } else {
+                finalTranscript += (finalTranscript ? ' ' : '') + bestTranscript;
+              }
             }
           } else if (transcript) {
             // Low confidence, but use it anyway if no better option
-            newFinalParts.push(transcript);
+            if (isMobileRef.current) {
+              finalTranscriptPartsRef.current.push(transcript);
+            } else {
+              finalTranscript += (finalTranscript ? ' ' : '') + transcript;
+            }
           }
         } else {
           // For interim results, use only the LAST interim result (most recent)
@@ -188,29 +178,8 @@ export const useSpeechRecognition = (options: SpeechRecognitionOptions = {}) => 
       // Update the last processed index (mobile only)
       if (isMobileRef.current) {
         lastProcessedIndexRef.current = event.results.length;
-      }
-      
-      // Add new final parts to our stored final transcript (mobile only)
-      if (isMobileRef.current && newFinalParts.length > 0) {
-        finalTranscriptPartsRef.current.push(...newFinalParts);
-      }
-      
-      // Build the full transcript
-      let finalTranscript = '';
-      if (isMobileRef.current) {
-        // On mobile: use stored final parts + current interim
+        // Build final transcript from stored parts
         finalTranscript = finalTranscriptPartsRef.current.join(' ');
-      } else {
-        // On desktop: build from all final results (original behavior)
-        for (let i = 0; i < event.results.length; ++i) {
-          const result = event.results[i];
-          if (result.isFinal) {
-            const transcript = result[0]?.transcript?.trim() || '';
-            if (transcript) {
-              finalTranscript += (finalTranscript ? ' ' : '') + transcript;
-            }
-          }
-        }
       }
       
       const fullTranscript = finalTranscript + (interimTranscript ? ' ' + interimTranscript : '');
