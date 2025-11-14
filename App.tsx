@@ -80,8 +80,6 @@ const App: React.FC = () => {
         )
       );
       setIsGenerating(false);
-      // Automatically start listening for the next question.
-      startRecording();
     }
   };
 
@@ -93,10 +91,6 @@ const App: React.FC = () => {
 
   const handleDeleteMessage = (id: number) => {
     setChatMessages(prev => prev.filter(msg => msg.id !== id));
-    // Start recording immediately after deleting
-    if (!isRecording) {
-      startRecording();
-    }
   };
 
   const toggleRecording = () => {
